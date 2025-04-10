@@ -363,6 +363,8 @@ function buildNav(members, options={}) {
     let itemMembers = members[type]
     if (type == "events") {
       itemMembers = find({ kind: "event", memberof: undefined })
+    } else if (type == "tutorials") {
+      itemMembers.forEach(x => x.kind = "tutorial")
     }
     return buildTypeNav(type, itemMembers, seen, options)
   }))
@@ -389,10 +391,12 @@ function buildTypeNav(type, members, seen, options) {
     }
     
     return [
+        "<div class='nav-type'>",
         buildNavHeading(titleize(type)),
         members.map(member => {
           return buildMemberNav(member, seen, options)
-        }).join("\n")
+        }).join("\n"),
+        "</div>",
     ].join("\n")
 }
 
@@ -426,14 +430,6 @@ function buildMemberNav(member, seen, options) {
     }
 
     displayName = displayName.replace(/^module:/g, "")
-
-    if (member.type === 'tutorial') {
-      heading = buildNavItem(linktoTutorial(member.longname, displayName))
-    } else if (member.type == "externals") {
-      heading = buildNavHeading(buildNavType(member.kind, linktoExternal(member.longname, displayName)))
-    } else {
-      heading = buildNavHeading(buildNavType(member.kind, linkto(member.longname, displayName)))
-    }
     
     if (options.currentPath == helper.longnameToUrl[member.longname]) {
       ['function', 'member', 'event'].forEach(kind => {
@@ -459,6 +455,14 @@ function buildMemberNav(member, seen, options) {
         
       })
     }
+    console.log(member);
+    if (member.kind === 'tutorial') {
+      heading = buildNavItem(linktoTutorial(member.longname, displayName))
+    } else if (member.kind == "externals") {
+      heading = buildNavHeading(buildNavType(member.kind, linktoExternal(member.longname, displayName)))
+    } else {
+      heading = buildNavHeading(buildNavType(member.kind, linkto(member.longname, displayName)))
+    }
     seen.add(member.longname)
   }
 
@@ -475,6 +479,7 @@ function linktoExternal(longName, name) {
 
 // lazy method here :), but really only for few controlled strings
 function titleize (str) {
+  if (str == undefined || str == null) return str
   return str.split(' ').map(x => x.at(0).toUpperCase() + x.slice(1)).join(' ')
 }
 // lazy method here :), but really only for few controlled strings
@@ -531,7 +536,7 @@ function buildNavItem (itemContent) {
 function buildNavType (type, typeLink) {
   return [
     '<span class="nav-item-type type-' + type + '">',
-    type[0].toUpperCase(),
+    type.at(0).toUpperCase(),
     '</span>',
 
     '<span class="nav-item-name">',
@@ -848,7 +853,8 @@ exports.publish = function(taffyData, opts, tutorials) {
       title: title,
       header: tutorial.title,
       content: tutorial.parse(),
-      children: tutorial.children
+      children: tutorial.children,
+      filename: filename
     }
 
     var tutorialPath = path.join(outdir, filename)

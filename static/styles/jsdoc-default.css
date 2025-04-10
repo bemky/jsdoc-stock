@@ -253,6 +253,10 @@ nav details {
     margin-left: 1.5em;
 }
 
+.nav-type {
+    margin-bottom: 1em;
+}
+
 .nav-heading {
     margin-top: 0.2em;
     font-weight: bold;
