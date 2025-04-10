@@ -455,7 +455,6 @@ function buildMemberNav(member, seen, options) {
         
       })
     }
-    console.log(member);
     if (member.kind === 'tutorial') {
       heading = buildNavItem(linktoTutorial(member.longname, displayName))
     } else if (member.kind == "externals") {
