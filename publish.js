@@ -251,7 +251,8 @@ function generate(type, title, docs, filename, resolveLinks) {
   var docData = {
     type: type,
     title: title,
-    docs: docs
+    docs: docs,
+    filename: filename
   }
 
   var outpath = path.join(outdir, filename),
@@ -348,97 +349,120 @@ function attachModuleSymbols(doclets, modules) {
  * @param {array<object>} members.interfaces
  * @return {array} The HTML for the navigation sidebar.
  */
-function buildNav(members) {
+function buildNav(members, options={}) {
   var nav = []
-  var seen = {}
+  var seen = new Set
   var seenTutorials = {}
+  var conf = env.conf.templates || {}
 
-  nav.push(buildNavLink('home', '<a href="index.html">Home</a>'))
+  conf.default = conf.default || {}
 
-  nav = nav.concat(buildMemberNav(members.tutorials, "Tutorials", seenTutorials, linktoTutorial))
-  nav = nav.concat(buildMemberNav(members.classes, "Classes", seen, linkto))
-  nav = nav.concat(buildMemberNav(members.modules, "Modules", {}, linkto))
-  nav = nav.concat(buildMemberNav(members.externals, "Externals", seen, linktoExternal))
-  nav = nav.concat(buildMemberNav(members.events, "Events", seen, linkto))
-  nav = nav.concat(buildMemberNav(members.namespaces, "Namespaces", seen, linkto))
-  nav = nav.concat(buildMemberNav(members.mixins, "Mixins", seen, linkto))
-  nav = nav.concat(buildMemberNav(members.interfaces, "Interfaces", seen, linkto))
+  nav.push(buildNavLink('home', `<a href="index.html">${conf.logo ? `<img src="${conf.logo}" width="100%"/>` : 'Home'}</a>`))
+  
+  nav.push(...["tutorials", "classes", "modules", "externals", "events", "namespaces", "mixins", "interfaces"].map(type => {
+    let itemMembers = members[type]
+    if (type == "events") {
+      itemMembers = find({ kind: "event", memberof: undefined })
+    }
+    return buildTypeNav(type, itemMembers, seen, options)
+  }))
 
   if (members.globals.length) {
     nav.push(buildNavHeading(linkto('global', 'Globals')))
 
     members.globals.forEach(function (item) {
-      if (item.kind !== "typedef" && !hasOwnProp.call(seen, item.longname)) {
+      if (item.kind !== "typedef" && !seen.has(item.longname)) {
         nav.push(buildNavItem(buildNavType(item.kind, linkto(item.longname, item.name))))
       }
 
-      seen[item.longname] = true
+      seen.add(item.longname)
     })
   }
 
   return nav.join('')
 }
 
-function buildMemberNav(items, itemHeading, itemsSeen, linktoFn) {
-  var nav = []
-  var conf = env.conf.templates || {}
+function buildTypeNav(type, members, seen, options) {
+    var nav = []
+    if (members.length == 0) {
+      return
+    }
+    
+    return [
+        buildNavHeading(titleize(type)),
+        members.map(member => {
+          return buildMemberNav(member, seen, options)
+        }).join("\n")
+    ].join("\n")
+}
 
+function buildMemberNav(member, seen, options) {
+  var conf = env.conf.templates || {}
   conf.default = conf.default || {}
 
-  if (items && items.length) {
-    var itemsNav = ""
+  var methods = find({ kind: "function", memberof: member.longname })
+  var members = find({ kind: "member", memberof: member.longname })
+  var displayName
 
-    nav.push(buildNavHeading(itemHeading))
+  if (!hasOwnProp.call(member, "longname")) {
+    return buildNavItem(linkfoFn('', member.name))
+  }
+  
+  let heading;
+  let nav=[];
+  if (!hasOwnProp.call(seen, member.longname)) {
+    if (!!conf.default.useLongnameInNav) {
+      displayName = member.longname
 
-    items.forEach(function(item) {
-      var methods = find({ kind: "function", memberof: item.longname })
-      var members = find({ kind: "member", memberof: item.longname })
-      var displayName
-
-      if (!hasOwnProp.call(item, "longname")) {
-        nav.push(buildNavItem(linkfoFn('', item.name)))
-        return
+      if (conf.default.useLongnameInNav > 0 && conf.default.useLongnameInNav !== true) {
+        var num = conf.default.useLongnameInNav
+        var cropped = member.longname.split(".").slice(-num).join(".")
+        if (cropped !== displayName) {
+          displayName = "..." + cropped
+        }
       }
-      
-      if (!hasOwnProp.call(itemsSeen, item.longname)) {
-        if (!!conf.default.useLongnameInNav) {
-          displayName = item.longname
+    } else {
+      displayName = member.name
+    }
 
-          if (conf.default.useLongnameInNav > 0 && conf.default.useLongnameInNav !== true) {
-            var num = conf.default.useLongnameInNav
-            var cropped = item.longname.split(".").slice(-num).join(".")
-            if (cropped !== displayName) {
-              displayName = "..." + cropped
-            }
-          }
-        } else {
-          displayName = item.name
-        }
+    displayName = displayName.replace(/^module:/g, "")
 
-        displayName = displayName.replace(/^module:/g, "")
-
-        if (itemHeading === 'Tutorials') {
-          nav.push(buildNavItem(linktoFn(item.longname, displayName)))
-        } else {
-          nav.push(buildNavHeading(buildNavType(item.kind, linktoFn(item.longname, displayName))))
-        }
-
-        if (methods.length) {
-          methods.forEach(function(method) {
-            if (method.inherited && conf.showInheritedInNav === false) {
-              return
-            }
-
-            nav.push(buildNavItem(buildNavType(method.kind, linkto(method.longname, method.name))))
-          })
-        }
-
-        itemsSeen[item.longname] = true
-      }
-    })
+    if (member.type === 'tutorial') {
+      heading = buildNavItem(linktoTutorial(member.longname, displayName))
+    } else if (member.type == "externals") {
+      heading = buildNavHeading(buildNavType(member.kind, linktoExternal(member.longname, displayName)))
+    } else {
+      heading = buildNavHeading(buildNavType(member.kind, linkto(member.longname, displayName)))
+    }
+    
+    if (options.currentPath == helper.longnameToUrl[member.longname]) {
+      ['function', 'member', 'event'].forEach(kind => {
+        const members = find({ kind: kind, memberof: member.longname })
+        const scopes = {}
+        members.forEach(m => {
+          scopes[m.scope] = scopes[m.scope] || [];
+          scopes[m.scope].push(m);
+        })
+        Object.keys(scopes).forEach(scope => {
+          const subnav = scopes[scope].map(member => {
+            if (member.inherited && conf.showInheritedInNav === false) { return }
+            seen.add(member.longname);
+            return buildNavItem(buildNavType(member.kind, linkto(member.longname, member.name)))
+          }).filter(x => x).join("\n");
+          nav.push(`
+          <details open="true">
+            <summary>${titleize(scope)} ${titleize(pluralize(kind))}</summary>
+            ${subnav}
+          </details>
+          `);
+        })
+        
+      })
+    }
+    seen.add(member.longname)
   }
 
-  return nav
+  return [heading, nav.join("\n")].join("\n")
 }
 
 function linktoTutorial(longName, name) {
@@ -447,6 +471,15 @@ function linktoTutorial(longName, name) {
 
 function linktoExternal(longName, name) {
   return linkto(longName, name.replace(/(^"|"$)/g, ""))
+}
+
+// lazy method here :), but really only for few controlled strings
+function titleize (str) {
+  return str.split(' ').map(x => x.at(0).toUpperCase() + x.slice(1)).join(' ')
+}
+// lazy method here :), but really only for few controlled strings
+function pluralize (str) {
+  return str + "s"
 }
 
 /**
@@ -459,9 +492,9 @@ function linktoExternal(longName, name) {
  */
 function buildNavLink (linkClass, linkContent) {
   return [
-    '<li class="nav-link nav-' + linkClass + '-link">',
+    '<div class="nav-link nav-' + linkClass + '-link">',
     linkContent,
-    '</li>'
+    '</div>'
   ].join('')
 }
 
@@ -474,9 +507,9 @@ function buildNavLink (linkClass, linkContent) {
  */
 function buildNavHeading (content) {
   return [
-    '<li class="nav-heading">',
+    '<div class="nav-heading">',
     content,
-    '</li>'
+    '</div>'
   ].join('')
 }
 
@@ -489,9 +522,9 @@ function buildNavHeading (content) {
  */
 function buildNavItem (itemContent) {
   return [
-    '<li class="nav-item">',
+    '<div class="nav-item">',
     itemContent,
-    '</li>'
+    '</div>'
   ].join('')
 }
 
@@ -601,12 +634,14 @@ exports.publish = function(taffyData, opts, tutorials) {
   // copy the template's static files to outdir
   var fromDir = path.join(templatePath, "static")
   var staticFiles = fs.ls(fromDir, 3)
-
+  
   staticFiles.forEach(function(fileName) {
     var toDir = fs.toDir(fileName.replace(fromDir, outdir))
     fs.mkPath(toDir)
     fs.copyFileSync(fileName, toDir)
   })
+  
+
 
   // copy user-specified static files to outdir
   var staticFilePaths
@@ -621,7 +656,6 @@ exports.publish = function(taffyData, opts, tutorials) {
       conf.default.staticFiles
     )
     staticFileScanner = new (require("jsdoc/src/scanner").Scanner)()
-
     staticFilePaths.forEach(function(filePath) {
       var extraStaticFiles = staticFileScanner.scan(
         [filePath],
@@ -705,9 +739,9 @@ exports.publish = function(taffyData, opts, tutorials) {
   view.tutoriallink = tutoriallink
   view.htmlsafe = htmlsafe
   view.outputSourceFiles = outputSourceFiles
+  view.nav = buildNav
+  view.members = members
 
-  // once for all
-  view.nav = buildNav(members)
   attachModuleSymbols(find({ longname: { left: "module:" } }), members.modules)
 
   // generate the pretty-printed source files first so other pages can link to them
