@@ -369,14 +369,12 @@ function buildNav(members, options={}) {
     return buildTypeNav(type, itemMembers, seen, options)
   }))
 
-  if (members.globals.length) {
+  const globals = members.globals.filter(x => x.kind !== "typedef" && !seen.has(x.longname))
+  if (globals.length) {
     nav.push(buildNavHeading(linkto('global', 'Globals')))
 
-    members.globals.forEach(function (item) {
-      if (item.kind !== "typedef" && !seen.has(item.longname)) {
-        nav.push(buildNavItem(buildNavType(item.kind, linkto(item.longname, item.name))))
-      }
-
+    globals.forEach(function (item) {
+      nav.push(buildNavItem(buildNavType(item.kind, linkto(item.longname, item.name))))
       seen.add(item.longname)
     })
   }
