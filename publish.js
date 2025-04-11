@@ -668,6 +668,9 @@ exports.publish = function(taffyData, opts, tutorials) {
       extraStaticFiles.forEach(function(fileName) {
         var sourcePath = fs.toDir(filePath)
         var toDir = fs.toDir(fileName.replace(sourcePath, outdir))
+        if (sourcePath == '.') {
+          toDir = fileName.split("/").slice(0, -1).concat(outdir).join('/')
+        }
         fs.mkPath(toDir)
         fs.copyFileSync(fileName, toDir)
       })
